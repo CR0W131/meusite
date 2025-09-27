@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rex Investimento - Carteira BTC</title>
+    <!-- Carrega o Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Define a fonte Inter e o tema dark -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Fundo escuro */
+        }
+        .card {
+            box-shadow: 0 10px 30px rgba(0, 255, 127, 0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- Container Principal do Dashboard -->
+    <div class="card w-full max-w-lg bg-gray-800 p-8 md:p-10 rounded-xl border-t-4 border-green-500 transition-all duration-300 hover:shadow-xl">
+        
+        <header class="text-center mb-8">
+            <!-- Título ajustado para celular (text-3xl) e maior em telas médias/grandes (sm:text-4xl) -->
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight flex items-center justify-center gap-3">
+                <!-- Símbolo ajustado para celular (text-4xl) e maior em telas médias/grandes (sm:text-5xl) -->
+                <span class="text-green-500 text-4xl sm:text-5xl">₿</span> Rex Investimento
+            </h1>
+            <p class="text-green-400 text-lg mt-2">Dashboard de Riqueza Digital</p>
+        </header>
+
+        <!-- Seção do Saldo BTC Fixo -->
+        <div class="mb-8 p-6 bg-gray-700 rounded-lg">
+            <h2 class="text-xl font-semibold text-gray-300 mb-2">Saldo</h2>
+            <!-- Saldo ajustado para celular (text-4xl) e maior em telas médias/grandes (sm:text-5xl) -->
+            <p class="text-4xl sm:text-5xl font-bold text-green-500" id="btc-balance">0.1704 BTC</p>
+        </div>
+
+        <!-- Cotações e Valores Calculados -->
+        <div class="space-y-4">
+
+            <!-- Saldo em Dólar (USD) -->
+            <div class="flex justify-between items-center p-4 bg-gray-700 rounded-lg">
+                <div>
+                    <p class="text-sm font-medium text-gray-300">Valor Atual (USD)</p>
+                    <!-- Valor ajustado para celular (text-2xl) e maior em telas médias/grandes (sm:text-3xl) -->
+                    <p class="text-2xl sm:text-3xl font-bold text-white" id="total-usd">Calculando...</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-400" id="btc-price-usd">BTC/USD: --</p>
+                    <p class="text-xs text-gray-500 mt-1">Cotação do BTC</p>
+                </div>
+            </div>
+
+            <!-- Saldo em Real (BRL) -->
+            <div class="flex justify-between items-center p-4 bg-gray-700 rounded-lg">
+                <div>
+                    <p class="text-sm font-medium text-gray-300">Valor Atual (BRL)</p>
+                    <!-- Valor ajustado para celular (text-2xl) e maior em telas médias/grandes (sm:text-3xl) -->
+                    <p class="text-2xl sm:text-3xl font-bold text-white" id="total-brl">Calculando...</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-400" id="usd-brl-rate">USD/BRL: --</p>
+                    <p class="text-xs text-gray-500 mt-1">Taxa de Câmbio</p>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Área de Status/Erro -->
+        <div class="mt-6 text-center text-sm">
+            <p id="status-message" class="text-yellow-500">Aguardando dados da API...</p>
+        </div>
+
+    </div>
+
+    <script>
+        // Dados fixos da carteira
+        const BTC_BALANCE = 0.1704;
+        
+        // URLs das APIs públicas para cotação
+        // 1. Cotação do Bitcoin em Dólar (CoinGecko)
+        const btcToUsdApiUrl = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+        // 2. Cotação do Dólar em Real (Awesome API)
+        const usdBrlApiUrl = 'https://economia.awesomeapi.com.br/last/USD-BRL';
+
+        // Elementos do DOM
+        const btcBalanceEl = document.getElementById('btc-balance');
+        const totalUsdEl = document.getElementById('total-usd');
+        const totalBrlEl = document.getElementById('total-brl');
+        const btcPriceUsdEl = document.getElementById('btc-price-usd');
+        const usdBrlRateEl = document.getElementById('usd-brl-rate');
+        const statusMessageEl = document.getElementById('status-message');
+
+        // Adiciona " BTC" ao saldo fixo ao carregar, já que o texto descritivo foi removido
+        btcBalanceEl.textContent = `${BTC_BALANCE} BTC`;
+
+        // Função para formatação de moeda
+        const formatCurrency = (amount, currency, locale) => {
+            return amount.toLocaleString(locale, {
+                style: 'currency',
+                currency: currency,
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        };
+
+        // Função de retry com backoff exponencial para lidar com falhas temporárias de rede
+        async function fetchWithRetry(url, maxRetries = 3, delay = 1000) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        // Se for um erro HTTP (4xx, 5xx), lança erro, mas permite retry
+                        throw new Error(`Erro HTTP! Status: ${response.status}`);
+                    }
+                    return response;
+                } catch (error) {
+                    console.warn(`Tentativa ${i + 1} de ${maxRetries} falhou para ${url}: ${error.message}`);
+                    if (i === maxRetries - 1) {
+                        // Se for a última tentativa, lança o erro final
+                        throw error;
+                    }
+                    // Espera com atraso exponencial (1s, 2s, 4s, ...)
+                    await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+                }
+            }
+        }
+
+
+        // Função principal para buscar e calcular
+        async function updateWallet() {
+            statusMessageEl.textContent = "Atualizando saldos em tempo real...";
+            statusMessageEl.classList.remove('text-red-500', 'text-green-500');
+            statusMessageEl.classList.add('text-yellow-500');
+
+            try {
+                // 1. Buscar preço do BTC em USD (com retry)
+                const btcResponse = await fetchWithRetry(btcToUsdApiUrl);
+                const btcData = await btcResponse.json();
+                // Acessar o preço, tratando possíveis estruturas vazias com optional chaining
+                const btcPriceUSD = btcData?.bitcoin?.usd;
+                if (!btcPriceUSD) throw new Error('Dados de cotação BTC inválidos.');
+
+                // 2. Buscar taxa de câmbio USD/BRL (com retry)
+                const brlResponse = await fetchWithRetry(usdBrlApiUrl);
+                const brlData = await brlResponse.json();
+                // A Awesome API retorna o valor no campo 'ask'
+                const brlRate = parseFloat(brlData?.USDBRL?.ask);
+                if (isNaN(brlRate)) throw new Error('Dados de taxa USD/BRL inválidos.');
+
+                // --- Cálculos ---
+                const totalUSD = BTC_BALANCE * btcPriceUSD;
+                const totalBRL = totalUSD * brlRate;
+                
+                // --- Atualizar a UI ---
+                
+                // Valores Totais
+                totalUsdEl.textContent = formatCurrency(totalUSD, 'USD', 'en-US');
+                totalBrlEl.textContent = formatCurrency(totalBRL, 'BRL', 'pt-BR');
+                
+                // Cotações
+                btcPriceUsdEl.textContent = `BTC/USD: ${formatCurrency(btcPriceUSD, 'USD', 'en-US')}`;
+                usdBrlRateEl.textContent = `USD/BRL: ${formatCurrency(brlRate, 'BRL', 'pt-BR').replace('R$', '')}`; // Remove R$ para mostrar só a taxa
+                
+                // Status de sucesso
+                statusMessageEl.textContent = `Última atualização: ${new Date().toLocaleTimeString('pt-BR')}.`;
+                statusMessageEl.classList.remove('text-yellow-500');
+                statusMessageEl.classList.add('text-green-500');
+
+            } catch (error) {
+                console.error("Erro ao atualizar a carteira:", error);
+                totalUsdEl.textContent = 'ERRO';
+                totalBrlEl.textContent = 'ERRO';
+                btcPriceUsdEl.textContent = 'BTC/USD: ERRO';
+                usdBrlRateEl.textContent = 'USD/BRL: ERRO';
+                statusMessageEl.textContent = `Erro ao buscar dados. Tente novamente. (${error.message})`;
+                statusMessageEl.classList.remove('text-yellow-500', 'text-green-500');
+                statusMessageEl.classList.add('text-red-500');
+            }
+        }
+
+        // Chamada inicial e atualização a cada 60 segundos (1 minuto)
+        updateWallet();
+        setInterval(updateWallet, 60000); // Atualiza a cada 60 segundos (60000 ms)
+
+    </script>
+</body>
+</html>
