@@ -69,12 +69,26 @@
 
             <!-- Quadro de Lucro/Prejuízo (BRL) -->
             <div class="p-4 bg-gray-700 rounded-lg text-center">
-                <p class="text-sm font-medium text-gray-300 mb-2">Lucro / Prejuízo (BRL)</p>
+                <p class="text-sm font-medium text-gray-300 mb-2">Lucro / Prejuízo (BRL) - BTC</p>
                 <!-- Valor em R$ -->
                 <p class="text-3xl sm:text-4xl font-extrabold mb-1" id="profit-loss-brl">R$ 0,00</p>
-                <!-- Percentual de ROI - NOVO ELEMENTO -->
+                <!-- Percentual de ROI -->
                 <p class="text-xl font-bold" id="profit-loss-percent">0.00%</p>
                 <p class="text-xs text-gray-500 mt-2">Investimento Inicial: R$ 100.000,00</p>
+            </div>
+            
+            <!-- Quadro de Comparativo (Juros Compostos 1% a.m.) - NOVO -->
+            <div class="p-4 bg-gray-700 rounded-lg text-center border-l-4 border-yellow-500">
+                <p class="text-sm font-medium text-gray-300 mb-2">Comparativo: Juros Compostos (1% a.m.)</p>
+                <!-- Valor projetado em R$ -->
+                <p class="text-xl font-extrabold text-yellow-400" id="compound-target-brl">R$ 100.000,00</p>
+                
+                <!-- NOVO: Rentabilidade total em R$ -->
+                <p class="text-sm text-gray-400 mt-1" id="compound-yield">Rendimento: --</p>
+                
+                <!-- Rentabilidade Relativa -->
+                <p class="text-sm font-bold mt-1" id="compound-diff">Rentabilidade: --</p>
+                <p class="text-xs text-gray-500 mt-2" id="compound-period">Desde 29/09/2025 (0 meses)</p>
             </div>
             
         </div>
@@ -91,6 +105,10 @@
         const BTC_BALANCE = 0.1704;
         // Investimento inicial em BRL para cálculo de Lucro/Prejuízo
         const INITIAL_INVESTMENT_BRL = 100000.00; 
+        // Taxa de juros compostos mensal para comparação (1%)
+        const COMPOUND_RATE_MONTHLY = 0.01;
+        // Data de início do investimento para cálculo de juros compostos
+        const START_DATE = new Date('2025-09-29T00:00:00'); // 29/09/2025
         
         // URLs das APIs públicas para cotação
         // 1. Cotação do Bitcoin em Dólar (CoinGecko)
@@ -103,10 +121,15 @@
         const totalUsdEl = document.getElementById('total-usd');
         const totalBrlEl = document.getElementById('total-brl');
         const profitLossEl = document.getElementById('profit-loss-brl');
-        const profitLossPercentEl = document.getElementById('profit-loss-percent'); // Novo elemento de Percentual
+        const profitLossPercentEl = document.getElementById('profit-loss-percent');
         const btcPriceUsdEl = document.getElementById('btc-price-usd');
         const usdBrlRateEl = document.getElementById('usd-brl-rate');
         const statusMessageEl = document.getElementById('status-message');
+        // Novos elementos para comparação
+        const compoundTargetEl = document.getElementById('compound-target-brl'); 
+        const compoundDiffEl = document.getElementById('compound-diff');
+        const compoundPeriodEl = document.getElementById('compound-period');
+        const compoundYieldEl = document.getElementById('compound-yield'); // NOVO ELEMENTO
 
         // Adiciona " BTC" ao saldo fixo ao carregar
         btcBalanceEl.textContent = `${BTC_BALANCE} BTC`;
@@ -120,6 +143,16 @@
                 maximumFractionDigits: 2
             });
         };
+        
+        // Função para calcular meses entre duas datas
+        function getMonthsDifference(d1, d2) {
+            let months;
+            months = (d2.getFullYear() - d1.getFullYear()) * 12;
+            months -= d1.getMonth();
+            months += d2.getMonth();
+            // Garante que o número de meses não seja negativo (caso a data de início seja futura)
+            return Math.max(0, months); 
+        }
 
         // Função de retry com backoff exponencial para lidar com falhas temporárias de rede
         async function fetchWithRetry(url, maxRetries = 3, delay = 1000) {
@@ -163,21 +196,30 @@
                 const brlRate = parseFloat(brlData?.USDBRL?.ask);
                 if (isNaN(brlRate)) throw new Error('Dados de taxa USD/BRL inválidos.');
 
-                // --- Cálculos ---
+                // --- Cálculos de Cripto ---
                 const totalUSD = BTC_BALANCE * btcPriceUSD;
                 const totalBRL = totalUSD * brlRate;
                 const profitOrLossBRL = totalBRL - INITIAL_INVESTMENT_BRL;
-                
-                // Cálculo do Percentual (ROI)
                 const profitOrLossPercent = (profitOrLossBRL / INITIAL_INVESTMENT_BRL) * 100;
+
+                // --- Cálculos de Comparação (Juros Compostos) ---
+                const today = new Date();
+                const monthsPassed = getMonthsDifference(START_DATE, today);
                 
+                // Fórmula de Juros Compostos: M = C * (1 + i)^t
+                const compoundTargetBRL = INITIAL_INVESTMENT_BRL * Math.pow((1 + COMPOUND_RATE_MONTHLY), monthsPassed);
+                const compoundYieldBRL = compoundTargetBRL - INITIAL_INVESTMENT_BRL; // NOVO CÁLCULO
+                
+                // Diferença (BTC atual vs. Juros Compostos)
+                const diffBtcCompound = totalBRL - compoundTargetBRL;
+
                 // --- Atualizar a UI ---
                 
                 // Valores Totais
                 totalUsdEl.textContent = formatCurrency(totalUSD, 'USD', 'en-US');
                 totalBrlEl.textContent = formatCurrency(totalBRL, 'BRL', 'pt-BR');
                 
-                // Lucro/Prejuízo e Percentual
+                // Lucro/Prejuízo e Percentual (BTC)
                 const isProfit = profitOrLossBRL >= 0;
                 const colorClass = isProfit ? 'text-green-500' : 'text-red-500';
 
@@ -199,6 +241,23 @@
                 btcPriceUsdEl.textContent = `BTC/USD: ${formatCurrency(btcPriceUSD, 'USD', 'en-US')}`;
                 usdBrlRateEl.textContent = `USD/BRL: ${formatCurrency(brlRate, 'BRL', 'pt-BR').replace('R$', '')}`;
                 
+                // Comparativo (Juros Compostos)
+                compoundTargetEl.textContent = formatCurrency(compoundTargetBRL, 'BRL', 'pt-BR');
+                
+                // NOVO: Exibe o Rendimento (lucro total)
+                compoundYieldEl.textContent = `Rendimento: ${formatCurrency(compoundYieldBRL, 'BRL', 'pt-BR')}`;
+                
+                compoundPeriodEl.textContent = `Desde ${START_DATE.toLocaleDateString('pt-BR')} (${monthsPassed} meses)`;
+                
+                const isBtcWinning = diffBtcCompound >= 0;
+                const diffColorClass = isBtcWinning ? 'text-green-400' : 'text-red-400';
+                const diffPrefix = isBtcWinning ? 'Acima' : 'Abaixo';
+                const diffText = `${diffPrefix} ${formatCurrency(Math.abs(diffBtcCompound), 'BRL', 'pt-BR')}`;
+                
+                compoundDiffEl.classList.remove('text-green-400', 'text-red-400', 'text-white');
+                compoundDiffEl.classList.add(diffColorClass);
+                compoundDiffEl.textContent = diffText;
+                
                 // Status de sucesso
                 statusMessageEl.textContent = `Última atualização: ${new Date().toLocaleTimeString('pt-BR')}.`;
                 statusMessageEl.classList.remove('text-yellow-500');
@@ -209,7 +268,10 @@
                 totalUsdEl.textContent = 'ERRO';
                 totalBrlEl.textContent = 'ERRO';
                 profitLossEl.textContent = 'ERRO';
-                profitLossPercentEl.textContent = 'ERRO'; // Define erro para percentual
+                profitLossPercentEl.textContent = 'ERRO';
+                compoundTargetEl.textContent = 'ERRO';
+                compoundYieldEl.textContent = 'ERRO'; // ERRO NO NOVO ELEMENTO
+                compoundDiffEl.textContent = 'ERRO';
                 btcPriceUsdEl.textContent = 'BTC/USD: ERRO';
                 usdBrlRateEl.textContent = 'USD/BRL: ERRO';
                 statusMessageEl.textContent = `Erro ao buscar dados. Tente novamente. (${error.message})`;
@@ -225,4 +287,3 @@
     </script>
 </body>
 </html>
-
