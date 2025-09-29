@@ -24,12 +24,11 @@
     <div class="card w-full max-w-lg bg-gray-800 p-8 md:p-10 rounded-xl border-t-4 border-green-500 transition-all duration-300 hover:shadow-xl">
         
         <header class="text-center mb-8">
-            <!-- Título ajustado para celular (text-3xl) e maior em telas médias/grandes (sm:text-4xl) -->
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight flex items-center justify-center gap-3">
-                <!-- Símbolo ajustado para celular (text-4xl) e maior em telas médias/grandes (sm:text-5xl) -->
-                <span class="text-green-500 text-4xl sm:text-5xl">₿</span> Rex Investimento
+            <!-- Título centralizado com apenas o Símbolo do Bitcoin -->
+            <h1 class="text-5xl font-extrabold text-white tracking-tight flex items-center justify-center">
+                <span class="text-green-500 text-6xl">₿</span>
             </h1>
-            <p class="text-green-400 text-lg mt-2">Dashboard de Riqueza Digital</p>
+            <!-- Subtítulo removido -->
         </header>
 
         <!-- Seção do Saldo BTC Fixo -->
@@ -67,6 +66,16 @@
                     <p class="text-xs text-gray-500 mt-1">Taxa de Câmbio</p>
                 </div>
             </div>
+
+            <!-- Quadro de Lucro/Prejuízo (BRL) -->
+            <div class="p-4 bg-gray-700 rounded-lg text-center">
+                <p class="text-sm font-medium text-gray-300 mb-2">Lucro / Prejuízo (BRL)</p>
+                <!-- Valor em R$ -->
+                <p class="text-3xl sm:text-4xl font-extrabold mb-1" id="profit-loss-brl">R$ 0,00</p>
+                <!-- Percentual de ROI - NOVO ELEMENTO -->
+                <p class="text-xl font-bold" id="profit-loss-percent">0.00%</p>
+                <p class="text-xs text-gray-500 mt-2">Investimento Inicial: R$ 100.000,00</p>
+            </div>
             
         </div>
         
@@ -80,6 +89,8 @@
     <script>
         // Dados fixos da carteira
         const BTC_BALANCE = 0.1704;
+        // Investimento inicial em BRL para cálculo de Lucro/Prejuízo
+        const INITIAL_INVESTMENT_BRL = 100000.00; 
         
         // URLs das APIs públicas para cotação
         // 1. Cotação do Bitcoin em Dólar (CoinGecko)
@@ -91,11 +102,13 @@
         const btcBalanceEl = document.getElementById('btc-balance');
         const totalUsdEl = document.getElementById('total-usd');
         const totalBrlEl = document.getElementById('total-brl');
+        const profitLossEl = document.getElementById('profit-loss-brl');
+        const profitLossPercentEl = document.getElementById('profit-loss-percent'); // Novo elemento de Percentual
         const btcPriceUsdEl = document.getElementById('btc-price-usd');
         const usdBrlRateEl = document.getElementById('usd-brl-rate');
         const statusMessageEl = document.getElementById('status-message');
 
-        // Adiciona " BTC" ao saldo fixo ao carregar, já que o texto descritivo foi removido
+        // Adiciona " BTC" ao saldo fixo ao carregar
         btcBalanceEl.textContent = `${BTC_BALANCE} BTC`;
 
         // Função para formatação de moeda
@@ -141,20 +154,22 @@
                 // 1. Buscar preço do BTC em USD (com retry)
                 const btcResponse = await fetchWithRetry(btcToUsdApiUrl);
                 const btcData = await btcResponse.json();
-                // Acessar o preço, tratando possíveis estruturas vazias com optional chaining
                 const btcPriceUSD = btcData?.bitcoin?.usd;
                 if (!btcPriceUSD) throw new Error('Dados de cotação BTC inválidos.');
 
                 // 2. Buscar taxa de câmbio USD/BRL (com retry)
                 const brlResponse = await fetchWithRetry(usdBrlApiUrl);
                 const brlData = await brlResponse.json();
-                // A Awesome API retorna o valor no campo 'ask'
                 const brlRate = parseFloat(brlData?.USDBRL?.ask);
                 if (isNaN(brlRate)) throw new Error('Dados de taxa USD/BRL inválidos.');
 
                 // --- Cálculos ---
                 const totalUSD = BTC_BALANCE * btcPriceUSD;
                 const totalBRL = totalUSD * brlRate;
+                const profitOrLossBRL = totalBRL - INITIAL_INVESTMENT_BRL;
+                
+                // Cálculo do Percentual (ROI)
+                const profitOrLossPercent = (profitOrLossBRL / INITIAL_INVESTMENT_BRL) * 100;
                 
                 // --- Atualizar a UI ---
                 
@@ -162,9 +177,27 @@
                 totalUsdEl.textContent = formatCurrency(totalUSD, 'USD', 'en-US');
                 totalBrlEl.textContent = formatCurrency(totalBRL, 'BRL', 'pt-BR');
                 
+                // Lucro/Prejuízo e Percentual
+                const isProfit = profitOrLossBRL >= 0;
+                const colorClass = isProfit ? 'text-green-500' : 'text-red-500';
+
+                // 1. Valor em R$
+                let profitLossText = formatCurrency(Math.abs(profitOrLossBRL), 'BRL', 'pt-BR');
+                profitLossEl.classList.remove('text-green-500', 'text-red-500');
+                profitLossEl.classList.add(colorClass);
+                profitLossText = (isProfit ? `+ ${profitLossText}` : `- ${profitLossText}`);
+                profitLossEl.textContent = profitLossText;
+                
+                // 2. Percentual
+                let percentText = `${Math.abs(profitOrLossPercent).toFixed(2)}%`;
+                profitLossPercentEl.classList.remove('text-green-500', 'text-red-500');
+                profitLossPercentEl.classList.add(colorClass);
+                percentText = (isProfit ? `+${percentText}` : `-${percentText}`);
+                profitLossPercentEl.textContent = percentText;
+                
                 // Cotações
                 btcPriceUsdEl.textContent = `BTC/USD: ${formatCurrency(btcPriceUSD, 'USD', 'en-US')}`;
-                usdBrlRateEl.textContent = `USD/BRL: ${formatCurrency(brlRate, 'BRL', 'pt-BR').replace('R$', '')}`; // Remove R$ para mostrar só a taxa
+                usdBrlRateEl.textContent = `USD/BRL: ${formatCurrency(brlRate, 'BRL', 'pt-BR').replace('R$', '')}`;
                 
                 // Status de sucesso
                 statusMessageEl.textContent = `Última atualização: ${new Date().toLocaleTimeString('pt-BR')}.`;
@@ -175,6 +208,8 @@
                 console.error("Erro ao atualizar a carteira:", error);
                 totalUsdEl.textContent = 'ERRO';
                 totalBrlEl.textContent = 'ERRO';
+                profitLossEl.textContent = 'ERRO';
+                profitLossPercentEl.textContent = 'ERRO'; // Define erro para percentual
                 btcPriceUsdEl.textContent = 'BTC/USD: ERRO';
                 usdBrlRateEl.textContent = 'USD/BRL: ERRO';
                 statusMessageEl.textContent = `Erro ao buscar dados. Tente novamente. (${error.message})`;
@@ -190,3 +225,4 @@
     </script>
 </body>
 </html>
+
