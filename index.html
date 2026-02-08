@@ -1,322 +1,257 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Wallet, 
-  TrendingUp, 
-  TrendingDown, 
-  BarChart3, 
-  DollarSign, 
-  History, 
-  Calculator, 
-  RefreshCw,
-  ArrowUpRight,
-  ChevronRight,
-  X
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>₿ Bitcoin Wallet Tracker</title>
+    
+    <!-- Bibliotecas Necessárias -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
 
-// --- CONFIGURAÇÕES E DADOS MOCK ---
-const WALLET_BALANCE_BTC = 0.17508990;
-const INITIAL_INVESTMENT_BRL = 100000.00;
-const UPDATE_INTERVAL_MS = 60000;
-const API_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,brl';
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: 
+                radial-gradient(circle at 20% 20%, #1f2937 0%, transparent 40%),
+                radial-gradient(circle at 80% 0%, #78350f 0%, transparent 35%),
+                #0b0f19;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
 
-const PURCHASE_TRANSACTIONS = [
-  { btc: 0.04104891, date: '2025-09-29', id: '01000011' },
-  { btc: 0.04005861, date: '2025-09-29', id: '01000110' },
-  { btc: 0.01773225, date: '2025-09-29', id: '01000110' },
-  { btc: 0.03875900, date: '2025-10-01', id: '01000011' },
-  { btc: 0.02018070, date: '2025-10-01', id: '01000110' },
-  { btc: 0.00094905, date: '2025-12-15', id: '01000011' },
-  { btc: 0.00095091, date: '2025-12-15', id: '01000110' },
-  { btc: 0.00085914, date: '2025-01-15', id: '01000011' },
-  { btc: 0.00095133, date: '2026-01-22', id: '01000110' },
-  { btc: 0.00680000, date: '2026-02-05', id: '01000110' },
-  { btc: 0.00680000, date: '2026-02-05', id: '01000011' }
-];
+        .glass {
+            background: rgba(17, 24, 39, 0.55);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        }
 
-// --- COMPONENTES AUXILIARES ---
+        .fade-in {
+            animation: fade 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
 
-const Modal = ({ isOpen, onClose, title, icon: Icon, children }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-sm transition-all">
-      <div className="bg-[#0f172a] border-t sm:border border-white/10 w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom sm:zoom-in duration-300">
-        <div className="p-6 border-b border-white/5 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            {Icon && <Icon className="w-5 h-5 text-orange-500" />}
-            <h3 className="text-lg font-bold text-white uppercase tracking-tight">{title}</h3>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
-            <X className="w-5 h-5 text-gray-400" />
-          </button>
-        </div>
-        <div className="p-6 pb-10 sm:pb-6">{children}</div>
-      </div>
-    </div>
-  );
-};
+        @keyframes fade {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-const StatCard = ({ title, value, subtitle, icon: Icon, colorClass, onClick, loading }) => (
-  <div 
-    onClick={onClick}
-    className={`group relative p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl transition-all duration-300 hover:bg-white/10 active:scale-[0.98] cursor-pointer ${colorClass}`}
-  >
-    <div className="flex justify-between items-start mb-3 sm:mb-4">
-      <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest">{title}</span>
-      <div className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-white/5 group-hover:bg-white/10 transition-colors`}>
-        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-      </div>
-    </div>
-    <div className="space-y-1">
-      <h2 className={`text-xl sm:text-2xl md:text-3xl font-black tracking-tight transition-all truncate ${loading ? 'opacity-20 blur-sm' : 'opacity-100 blur-0'}`}>
-        {value}
-      </h2>
-      {subtitle && <p className="text-[9px] sm:text-[10px] font-medium text-gray-500 uppercase tracking-tighter truncate">{subtitle}</p>}
-    </div>
-    <div className="absolute bottom-4 right-4 opacity-0 sm:group-hover:opacity-100 transition-opacity hidden sm:block">
-      <ChevronRight className="w-4 h-4 text-gray-600" />
-    </div>
-  </div>
-);
+        .text-metallic-blue {
+            color: #3b82f6;
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+        }
+        .text-emerald-glow {
+            color: #10b981;
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
 
-// --- COMPONENTE PRINCIPAL ---
+        .custom-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="p-6">
 
-export default function App() {
-  const [prices, setPrices] = useState({ usd: 0, brl: 0 });
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [activeModal, setActiveModal] = useState(null);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(API_URL);
-      if (!response.ok) throw new Error();
-      const data = await response.json();
-      setPrices(data.bitcoin);
-      setLastUpdate(new Date());
-      setError(false);
-    } catch (err) {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, UPDATE_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, []);
-
-  const metrics = useMemo(() => {
-    const currentBrlValue = WALLET_BALANCE_BTC * prices.brl;
-    const currentUsdValue = WALLET_BALANCE_BTC * prices.usd;
-    const pnl = currentBrlValue - INITIAL_INVESTMENT_BRL;
-    const pnlPercent = (pnl / INITIAL_INVESTMENT_BRL) * 100;
-    const avgPrice = INITIAL_INVESTMENT_BRL / WALLET_BALANCE_BTC;
-
-    return {
-      currentBrlValue,
-      currentUsdValue,
-      pnl,
-      pnlPercent,
-      avgPrice,
-      isProfit: pnl >= 0
-    };
-  }, [prices]);
-
-  const formatBRL = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-  const formatUSD = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
-  const formatBTC = (val) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 8 }).format(val);
-
-  return (
-    <div className="min-h-[100dvh] bg-[#020617] text-slate-200 font-sans selection:bg-orange-500/30 overflow-x-hidden">
-      {/* Background Decorativo */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-5%] left-[-10%] w-[60%] h-[30%] bg-orange-500/10 blur-[80px] sm:blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-5%] right-[-10%] w-[60%] h-[30%] bg-blue-500/10 blur-[80px] sm:blur-[120px] rounded-full" />
-      </div>
-
-      <main className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-20">
+    <div class="max-w-5xl mx-auto fade-in">
         
-        {/* Header */}
-        <header className="flex flex-col items-center mb-10 sm:mb-16 text-center">
-          <div className="relative group cursor-pointer touch-none" onClick={fetchData}>
-            <div className="absolute inset-0 bg-orange-500 blur-2xl opacity-20 sm:group-hover:opacity-40 transition-opacity rounded-full" />
-            <div className="relative w-20 h-20 sm:w-24 sm:h-24 bg-slate-900 border-2 border-orange-500/50 rounded-full flex items-center justify-center shadow-2xl transition-transform active:scale-90">
-              <span className="text-4xl sm:text-5xl font-black text-orange-500 drop-shadow-[0_0_10px_rgba(249,115,22,0.4)]">₿</span>
+        <!-- HEADER -->
+        <header class="flex flex-col items-center gap-4 mb-10">
+            <div class="w-28 h-28 rounded-3xl glass flex items-center justify-center shadow-2xl relative">
+                <span class="text-6xl font-black text-orange-400">₿</span>
+                <div id="loadingIcon" class="absolute -bottom-2 -right-2 text-orange-400 hidden">
+                    <i data-lucide="refresh-cw" class="animate-spin w-5 h-5"></i>
+                </div>
             </div>
-            {loading && (
-              <div className="absolute -bottom-1 -right-1 bg-orange-500 p-1.5 rounded-full animate-spin">
-                <RefreshCw className="w-3 h-3 text-black" />
-              </div>
-            )}
-          </div>
-          <h1 className="mt-6 text-3xl sm:text-4xl font-extrabold tracking-tighter text-white">
-            Carteira <span className="text-orange-500">Bitcoin</span>
-          </h1>
-          <p className="mt-2 text-gray-500 font-medium text-[10px] sm:text-xs flex items-center gap-2">
-            {lastUpdate ? `Atualizado: ${lastUpdate.toLocaleTimeString('pt-BR')}` : 'Buscando preços...'}
-            {error && <span className="text-red-500 ml-1 animate-pulse">• Erro</span>}
-          </p>
+            <h1 class="text-3xl font-black tracking-tight">Bitcoin Wallet</h1>
+            
+            <div class="flex items-center gap-4 text-[10px] font-bold tracking-widest text-slate-400 uppercase glass px-4 py-2 rounded-full border-white/5">
+                <div class="flex items-center gap-2 border-r border-white/10 pr-4">
+                    <div id="statusDot" class="w-2 h-2 rounded-full animate-pulse bg-emerald-500"></div>
+                    <span id="statusText">LIVE DATA</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <i data-lucide="clock" class="w-3 h-3"></i>
+                    <span id="lastUpdateHeader">A CARREGAR...</span>
+                </div>
+            </div>
         </header>
 
-        {/* Grid de Cards - Ajustado para mobile */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-          <StatCard 
-            title="Saldo BTC"
-            value={`${formatBTC(WALLET_BALANCE_BTC)} BTC`}
-            subtitle={`Custo: ${formatBRL(INITIAL_INVESTMENT_BRL)}`}
-            icon={Wallet}
-            colorClass="hover:border-orange-500/50 text-orange-500"
-            onClick={() => setActiveModal('transactions')}
-            loading={loading}
-          />
-
-          <StatCard 
-            title="Lucro / Prejuízo"
-            value={formatBRL(metrics.pnl)}
-            subtitle={`${metrics.pnlPercent > 0 ? '+' : ''}${metrics.pnlPercent.toFixed(2)}% total`}
-            icon={metrics.isProfit ? TrendingUp : TrendingDown}
-            colorClass={metrics.isProfit ? 'hover:border-emerald-500/50 text-emerald-500' : 'hover:border-rose-500/50 text-rose-500'}
-            onClick={() => setActiveModal('pnl')}
-            loading={loading}
-          />
-
-          <StatCard 
-            title="Valor em Reais"
-            value={formatBRL(metrics.currentBrlValue)}
-            subtitle="Cotação BRL atual"
-            icon={BarChart3}
-            colorClass="hover:border-blue-500/50 text-blue-400"
-            onClick={() => setActiveModal('average')}
-            loading={loading}
-          />
-
-          <StatCard 
-            title="Valor em Dólar"
-            value={formatUSD(metrics.currentUsdValue)}
-            subtitle="Cotação USD atual"
-            icon={DollarSign}
-            colorClass="hover:border-emerald-400/50 text-emerald-400"
-            loading={loading}
-          />
-        </div>
-
-        {/* Footer Ajustado */}
-        <footer className="mt-16 pt-8 border-t border-white/5 text-center">
-            <p className="text-[10px] sm:text-xs text-gray-700 font-black uppercase tracking-[0.3em]">
-               GTK
-            </p>
-        </footer>
-      </main>
-
-      {/* MODAL TRANSAÇÕES - Mobile Friendly */}
-      <Modal 
-        isOpen={activeModal === 'transactions'} 
-        onClose={() => setActiveModal(null)}
-        title="Histórico de Compras"
-        icon={History}
-      >
-        <div className="space-y-3 max-h-[50dvh] sm:max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
-          {[...PURCHASE_TRANSACTIONS].reverse().map((tx, i) => (
-            <div key={i} className="flex justify-between items-center p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 border border-white/5">
-              <div>
-                <p className="text-[9px] text-gray-500 font-bold uppercase mb-0.5">ID: {tx.id}</p>
-                <p className="font-bold text-white text-sm sm:text-base">{formatBTC(tx.btc)} <span className="text-orange-500 text-[10px]">BTC</span></p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-medium text-gray-400">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
-                <div className="mt-0.5 flex items-center justify-end text-[9px] text-emerald-500 font-bold">
-                  <ArrowUpRight className="w-2.5 h-2.5" /> OK
+        <!-- GRID DE CARDS (2x2 no mobile, 4 colunas no desktop) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <div onclick="openModal('tx')" class="glass p-5 rounded-2xl hover:scale-[1.03] transition cursor-pointer border-l-4 border-orange-500/30">
+                <div class="flex justify-between mb-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                    Saldo BTC <i data-lucide="wallet" class="w-3.5 h-3.5"></i>
                 </div>
-              </div>
+                <p class="text-lg sm:text-xl font-extrabold text-orange-400">0.17508990</p>
             </div>
-          ))}
-        </div>
-        <div className="mt-6 p-4 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-center">
-           <p className="text-[10px] text-orange-500 font-bold uppercase mb-1">Volume Total</p>
-           <p className="text-lg font-black text-white">{formatBTC(WALLET_BALANCE_BTC)} BTC</p>
-        </div>
-      </Modal>
 
-      {/* MODAL PNL */}
-      <Modal 
-        isOpen={activeModal === 'pnl'} 
-        onClose={() => setActiveModal(null)}
-        title="Performance"
-        icon={Calculator}
-      >
-        <div className={`p-6 sm:p-8 rounded-3xl border transition-all text-center ${metrics.isProfit ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20'}`}>
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">P/L Líquido</p>
-          <h4 className={`text-3xl sm:text-4xl font-black mb-1 ${metrics.isProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
-            {formatBRL(metrics.pnl)}
-          </h4>
-          <p className={`text-base sm:text-lg font-bold italic opacity-80 ${metrics.isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {metrics.pnlPercent > 0 ? '+' : ''}{metrics.pnlPercent.toFixed(2)}%
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-3 mt-4">
-          <div className="p-3 rounded-xl bg-white/5 border border-white/5">
-            <p className="text-[9px] text-gray-500 font-bold uppercase mb-0.5">Investimento</p>
-            <p className="font-bold text-white text-xs">{formatBRL(INITIAL_INVESTMENT_BRL)}</p>
-          </div>
-          <div className="p-3 rounded-xl bg-white/5 border border-white/5">
-            <p className="text-[9px] text-gray-500 font-bold uppercase mb-0.5">Valor Atual</p>
-            <p className="font-bold text-white text-xs">{formatBRL(metrics.currentBrlValue)}</p>
-          </div>
+            <div onclick="openModal('avg')" class="glass p-5 rounded-2xl hover:scale-[1.03] transition cursor-pointer border-l-4 border-blue-500/30">
+                <div class="flex justify-between mb-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                    Valor BRL <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i>
+                </div>
+                <p id="valBrl" class="text-lg sm:text-xl font-black text-metallic-blue">---</p>
+            </div>
+
+            <div class="glass p-5 rounded-2xl hover:scale-[1.03] transition border-l-4 border-emerald-500/30">
+                <div class="flex justify-between mb-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                    Valor USD <i data-lucide="dollar-sign" class="w-3.5 h-3.5"></i>
+                </div>
+                <p id="valUsd" class="text-lg sm:text-xl font-black text-emerald-glow">---</p>
+            </div>
+
+            <div onclick="openModal('pnl')" class="glass p-5 rounded-2xl hover:scale-[1.03] transition cursor-pointer">
+                <div class="flex justify-between mb-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                    Resultado <i id="pnlIcon" data-lucide="activity" class="w-3.5 h-3.5"></i>
+                </div>
+                <p id="valPnl" class="text-lg sm:text-xl font-black">---</p>
+            </div>
+
         </div>
 
-        <button 
-          onClick={() => setActiveModal(null)}
-          className={`w-full mt-6 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${metrics.isProfit ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20' : 'bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-500/20'}`}
-        >
-          Fechar
-        </button>
-      </Modal>
-
-      {/* MODAL PREÇO MÉDIO */}
-      <Modal 
-        isOpen={activeModal === 'average'} 
-        onClose={() => setActiveModal(null)}
-        title="Preço Médio"
-        icon={TrendingUp}
-      >
-        <div className="space-y-4">
-          <div className="p-6 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-center">
-            <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest mb-2">Seu Custo Médio</p>
-            <p className="text-2xl sm:text-3xl font-black text-white">{formatBRL(metrics.avgPrice)}</p>
-          </div>
-          
-          <div className="bg-white/5 rounded-xl p-4 space-y-3">
-             <div className="flex justify-between text-[10px]">
-                <span className="text-gray-500 font-bold uppercase">Preço Mercado</span>
-                <span className="text-white font-bold">{formatBRL(prices.brl)}</span>
-             </div>
-             <div className="h-px bg-white/5" />
-             <div className="flex justify-between text-[10px]">
-                <span className="text-gray-500 font-bold uppercase">Status Break-even</span>
-                <span className={prices.brl > metrics.avgPrice ? "text-emerald-500 font-black" : "text-rose-500 font-black"}>
-                  {((prices.brl / metrics.avgPrice - 1) * 100).toFixed(2)}%
-                </span>
-             </div>
-          </div>
+        <div class="text-center mt-12 text-[10px] font-bold tracking-[0.4em] text-slate-600 uppercase">
+            GTK
         </div>
-      </Modal>
-
-      {/* Estilos customizados */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(249, 115, 22, 0.2); border-radius: 10px; }
-        @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        .animate-in { animation: fade-in 0.3s ease-out; }
-        @media (max-width: 640px) {
-          .slide-in-from-bottom { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        }
-      `}} />
     </div>
-  );
-}
+
+    <!-- MODAL -->
+    <div id="modalOverlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-md p-6">
+        <div class="glass rounded-3xl p-8 w-full max-w-sm fade-in shadow-2xl border border-white/10">
+            <div class="flex items-center gap-3 mb-4">
+                <div id="modalIconContainer" class="text-orange-400"></div>
+                <h3 id="modalTitle" class="font-black text-xl"></h3>
+            </div>
+            <div id="modalContent" class="text-sm text-slate-300 leading-relaxed"></div>
+            <button onclick="closeModal()" class="mt-6 w-full bg-orange-500 hover:bg-orange-400 active:scale-95 transition-all text-black font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20">
+                FECHAR
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const WALLET_BTC = 0.17508990;
+        const INITIAL_INVEST = 100000.00;
+        const API_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,brl";
+
+        const TRANSACTIONS = [
+            { btc: 0.04104891, date: '2025-09-29' }, { btc: 0.04005861, date: '2025-09-29' },
+            { btc: 0.01773225, date: '2025-09-29' }, { btc: 0.03875900, date: '2025-10-01' },
+            { btc: 0.02018070, date: '2025-10-01' }, { btc: 0.00094905, date: '2025-12-15' },
+            { btc: 0.00095091, date: '2025-12-15' }, { btc: 0.00085914, date: '2025-01-15' },
+            { btc: 0.00095133, date: '2026-01-22' }, { btc: 0.00680000, date: '2026-02-05' },
+            { btc: 0.00680000, date: '2026-02-05' }
+        ];
+
+        let currentPrices = { brl: 0, usd: 0 };
+
+        const fBrl = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+        const fUsd = v => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
+
+        function openModal(type) {
+            const overlay = document.getElementById('modalOverlay');
+            const title = document.getElementById('modalTitle');
+            const content = document.getElementById('modalContent');
+            const iconBox = document.getElementById('modalIconContainer');
+            
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+
+            if(type === 'tx') {
+                title.innerText = "Histórico de Compras";
+                iconBox.innerHTML = '<i data-lucide="history"></i>';
+                let html = `<div class="mb-4 flex justify-between items-center text-xs text-slate-400"><span>Total Acumulado:</span> <span class="text-orange-400 font-bold">${WALLET_BTC} BTC</span></div>`;
+                html += '<div class="space-y-2 max-h-48 overflow-y-auto custom-scroll pr-2">';
+                TRANSACTIONS.forEach(tx => {
+                    html += `<div class="flex justify-between text-[11px] py-2 border-b border-white/5">
+                                <span class="text-slate-500">${tx.date}</span>
+                                <span class="font-bold text-orange-400">${tx.btc} BTC</span>
+                             </div>`;
+                });
+                html += '</div>';
+                content.innerHTML = html;
+            } else if(type === 'avg') {
+                title.innerText = "Custo Médio";
+                iconBox.innerHTML = '<i data-lucide="calculator"></i>';
+                const avg = INITIAL_INVEST / WALLET_BTC;
+                content.innerHTML = `<div class="p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20 text-center"><div class="text-[10px] font-bold text-blue-400 uppercase mb-1">Seu Preço Médio</div><div class="text-xl font-black text-white">${fBrl(avg)}</div></div>`;
+            } else if(type === 'pnl') {
+                title.innerText = "Performance";
+                iconBox.innerHTML = '<i data-lucide="activity"></i>';
+                const totalValue = currentPrices.brl * WALLET_BTC;
+                const pnl = totalValue - INITIAL_INVEST;
+                const isProfit = pnl >= 0;
+                content.innerHTML = `<div class="p-6 rounded-2xl text-center ${isProfit ? 'bg-emerald-500/10' : 'bg-rose-500/10'}"><div class="text-[10px] font-bold text-slate-500 uppercase mb-1">Lucro/Prejuízo Líquido</div><div class="text-2xl font-black ${isProfit ? 'text-emerald-400' : 'text-rose-400'}">${fBrl(pnl)}</div></div>`;
+            }
+            lucide.createIcons();
+        }
+
+        function closeModal() { document.getElementById('modalOverlay').classList.add('hidden'); }
+
+        // Função resiliente com Exponential Backoff
+        async function fetchWithRetry(url, retries = 5, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return await response.json();
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // Dobra o tempo de espera a cada erro
+                }
+            }
+        }
+
+        async function updateData() {
+            const loading = document.getElementById('loadingIcon');
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const headerUpdate = document.getElementById('lastUpdateHeader');
+            
+            loading.classList.remove('hidden');
+            
+            try {
+                const data = await fetchWithRetry(API_URL);
+                currentPrices = data.bitcoin;
+                
+                const totalBrl = currentPrices.brl * WALLET_BTC;
+                const totalUsd = currentPrices.usd * WALLET_BTC;
+                const pnl = totalBrl - INITIAL_INVEST;
+
+                document.getElementById('valBrl').innerText = fBrl(totalBrl);
+                document.getElementById('valUsd').innerText = fUsd(totalUsd);
+                
+                const pnlEl = document.getElementById('valPnl');
+                pnlEl.innerText = fBrl(pnl);
+                pnlEl.className = `text-lg sm:text-xl font-black ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+                
+                document.getElementById('pnlIcon').setAttribute('data-lucide', pnl >= 0 ? 'trending-up' : 'trending-down');
+                headerUpdate.innerText = new Date().toLocaleTimeString();
+                
+                statusDot.className = "w-2 h-2 rounded-full animate-pulse bg-emerald-500";
+                statusText.innerText = "LIVE DATA";
+            } catch (error) {
+                console.error("Erro ao buscar preços:", error);
+                headerUpdate.innerText = "RECONECTANDO...";
+                statusDot.className = "w-2 h-2 rounded-full bg-red-500";
+                statusText.innerText = "ERRO API";
+                // Tenta novamente em 5 segundos caso falhe o ciclo de retries
+                setTimeout(updateData, 5000);
+            } finally {
+                loading.classList.add('hidden');
+                lucide.createIcons();
+            }
+        }
+
+        lucide.createIcons();
+        updateData();
+        setInterval(updateData, 60000);
+    </script>
+</body>
+</html>
