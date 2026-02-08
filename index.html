@@ -1,289 +1,322 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rex Investimento - Carteira BTC</title>
-    <!-- Carrega o Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Define a fonte Inter e o tema dark -->
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0d1117; /* Fundo escuro */
-        }
-        .card {
-            box-shadow: 0 10px 30px rgba(0, 255, 127, 0.1);
-        }
-    </style>
-</head>
-<body class="min-h-screen flex items-center justify-center p-4">
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Wallet, 
+  TrendingUp, 
+  TrendingDown, 
+  BarChart3, 
+  DollarSign, 
+  History, 
+  Calculator, 
+  RefreshCw,
+  ArrowUpRight,
+  ChevronRight,
+  X
+} from 'lucide-react';
 
-    <!-- Container Principal do Dashboard -->
-    <div class="card w-full max-w-lg bg-gray-800 p-8 md:p-10 rounded-xl border-t-4 border-green-500 transition-all duration-300 hover:shadow-xl">
+// --- CONFIGURAÇÕES E DADOS MOCK ---
+const WALLET_BALANCE_BTC = 0.17508990;
+const INITIAL_INVESTMENT_BRL = 100000.00;
+const UPDATE_INTERVAL_MS = 60000;
+const API_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,brl';
+
+const PURCHASE_TRANSACTIONS = [
+  { btc: 0.04104891, date: '2025-09-29', id: '01000011' },
+  { btc: 0.04005861, date: '2025-09-29', id: '01000110' },
+  { btc: 0.01773225, date: '2025-09-29', id: '01000110' },
+  { btc: 0.03875900, date: '2025-10-01', id: '01000011' },
+  { btc: 0.02018070, date: '2025-10-01', id: '01000110' },
+  { btc: 0.00094905, date: '2025-12-15', id: '01000011' },
+  { btc: 0.00095091, date: '2025-12-15', id: '01000110' },
+  { btc: 0.00085914, date: '2025-01-15', id: '01000011' },
+  { btc: 0.00095133, date: '2026-01-22', id: '01000110' },
+  { btc: 0.00680000, date: '2026-02-05', id: '01000110' },
+  { btc: 0.00680000, date: '2026-02-05', id: '01000011' }
+];
+
+// --- COMPONENTES AUXILIARES ---
+
+const Modal = ({ isOpen, onClose, title, icon: Icon, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-sm transition-all">
+      <div className="bg-[#0f172a] border-t sm:border border-white/10 w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom sm:zoom-in duration-300">
+        <div className="p-6 border-b border-white/5 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            {Icon && <Icon className="w-5 h-5 text-orange-500" />}
+            <h3 className="text-lg font-bold text-white uppercase tracking-tight">{title}</h3>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+            <X className="w-5 h-5 text-gray-400" />
+          </button>
+        </div>
+        <div className="p-6 pb-10 sm:pb-6">{children}</div>
+      </div>
+    </div>
+  );
+};
+
+const StatCard = ({ title, value, subtitle, icon: Icon, colorClass, onClick, loading }) => (
+  <div 
+    onClick={onClick}
+    className={`group relative p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl transition-all duration-300 hover:bg-white/10 active:scale-[0.98] cursor-pointer ${colorClass}`}
+  >
+    <div className="flex justify-between items-start mb-3 sm:mb-4">
+      <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest">{title}</span>
+      <div className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-white/5 group-hover:bg-white/10 transition-colors`}>
+        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+      </div>
+    </div>
+    <div className="space-y-1">
+      <h2 className={`text-xl sm:text-2xl md:text-3xl font-black tracking-tight transition-all truncate ${loading ? 'opacity-20 blur-sm' : 'opacity-100 blur-0'}`}>
+        {value}
+      </h2>
+      {subtitle && <p className="text-[9px] sm:text-[10px] font-medium text-gray-500 uppercase tracking-tighter truncate">{subtitle}</p>}
+    </div>
+    <div className="absolute bottom-4 right-4 opacity-0 sm:group-hover:opacity-100 transition-opacity hidden sm:block">
+      <ChevronRight className="w-4 h-4 text-gray-600" />
+    </div>
+  </div>
+);
+
+// --- COMPONENTE PRINCIPAL ---
+
+export default function App() {
+  const [prices, setPrices] = useState({ usd: 0, brl: 0 });
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [activeModal, setActiveModal] = useState(null);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      setPrices(data.bitcoin);
+      setLastUpdate(new Date());
+      setError(false);
+    } catch (err) {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, UPDATE_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
+  const metrics = useMemo(() => {
+    const currentBrlValue = WALLET_BALANCE_BTC * prices.brl;
+    const currentUsdValue = WALLET_BALANCE_BTC * prices.usd;
+    const pnl = currentBrlValue - INITIAL_INVESTMENT_BRL;
+    const pnlPercent = (pnl / INITIAL_INVESTMENT_BRL) * 100;
+    const avgPrice = INITIAL_INVESTMENT_BRL / WALLET_BALANCE_BTC;
+
+    return {
+      currentBrlValue,
+      currentUsdValue,
+      pnl,
+      pnlPercent,
+      avgPrice,
+      isProfit: pnl >= 0
+    };
+  }, [prices]);
+
+  const formatBRL = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const formatUSD = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+  const formatBTC = (val) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 8 }).format(val);
+
+  return (
+    <div className="min-h-[100dvh] bg-[#020617] text-slate-200 font-sans selection:bg-orange-500/30 overflow-x-hidden">
+      {/* Background Decorativo */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-5%] left-[-10%] w-[60%] h-[30%] bg-orange-500/10 blur-[80px] sm:blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-5%] right-[-10%] w-[60%] h-[30%] bg-blue-500/10 blur-[80px] sm:blur-[120px] rounded-full" />
+      </div>
+
+      <main className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-20">
         
-        <header class="text-center mb-8">
-            <!-- Título centralizado com apenas o Símbolo do Bitcoin -->
-            <h1 class="text-5xl font-extrabold text-white tracking-tight flex items-center justify-center">
-                <span class="text-green-500 text-6xl">₿</span>
-            </h1>
-            <!-- Subtítulo removido -->
+        {/* Header */}
+        <header className="flex flex-col items-center mb-10 sm:mb-16 text-center">
+          <div className="relative group cursor-pointer touch-none" onClick={fetchData}>
+            <div className="absolute inset-0 bg-orange-500 blur-2xl opacity-20 sm:group-hover:opacity-40 transition-opacity rounded-full" />
+            <div className="relative w-20 h-20 sm:w-24 sm:h-24 bg-slate-900 border-2 border-orange-500/50 rounded-full flex items-center justify-center shadow-2xl transition-transform active:scale-90">
+              <span className="text-4xl sm:text-5xl font-black text-orange-500 drop-shadow-[0_0_10px_rgba(249,115,22,0.4)]">₿</span>
+            </div>
+            {loading && (
+              <div className="absolute -bottom-1 -right-1 bg-orange-500 p-1.5 rounded-full animate-spin">
+                <RefreshCw className="w-3 h-3 text-black" />
+              </div>
+            )}
+          </div>
+          <h1 className="mt-6 text-3xl sm:text-4xl font-extrabold tracking-tighter text-white">
+            Carteira <span className="text-orange-500">Bitcoin</span>
+          </h1>
+          <p className="mt-2 text-gray-500 font-medium text-[10px] sm:text-xs flex items-center gap-2">
+            {lastUpdate ? `Atualizado: ${lastUpdate.toLocaleTimeString('pt-BR')}` : 'Buscando preços...'}
+            {error && <span className="text-red-500 ml-1 animate-pulse">• Erro</span>}
+          </p>
         </header>
 
-        <!-- Seção do Saldo BTC Fixo -->
-        <div class="mb-8 p-6 bg-gray-700 rounded-lg">
-            <h2 class="text-xl font-semibold text-gray-300 mb-2">Saldo</h2>
-            <!-- Saldo ajustado para celular (text-4xl) e maior em telas médias/grandes (sm:text-5xl) -->
-            <p class="text-4xl sm:text-5xl font-bold text-green-500" id="btc-balance">0.1704 BTC</p>
+        {/* Grid de Cards - Ajustado para mobile */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+          <StatCard 
+            title="Saldo BTC"
+            value={`${formatBTC(WALLET_BALANCE_BTC)} BTC`}
+            subtitle={`Custo: ${formatBRL(INITIAL_INVESTMENT_BRL)}`}
+            icon={Wallet}
+            colorClass="hover:border-orange-500/50 text-orange-500"
+            onClick={() => setActiveModal('transactions')}
+            loading={loading}
+          />
+
+          <StatCard 
+            title="Lucro / Prejuízo"
+            value={formatBRL(metrics.pnl)}
+            subtitle={`${metrics.pnlPercent > 0 ? '+' : ''}${metrics.pnlPercent.toFixed(2)}% total`}
+            icon={metrics.isProfit ? TrendingUp : TrendingDown}
+            colorClass={metrics.isProfit ? 'hover:border-emerald-500/50 text-emerald-500' : 'hover:border-rose-500/50 text-rose-500'}
+            onClick={() => setActiveModal('pnl')}
+            loading={loading}
+          />
+
+          <StatCard 
+            title="Valor em Reais"
+            value={formatBRL(metrics.currentBrlValue)}
+            subtitle="Cotação BRL atual"
+            icon={BarChart3}
+            colorClass="hover:border-blue-500/50 text-blue-400"
+            onClick={() => setActiveModal('average')}
+            loading={loading}
+          />
+
+          <StatCard 
+            title="Valor em Dólar"
+            value={formatUSD(metrics.currentUsdValue)}
+            subtitle="Cotação USD atual"
+            icon={DollarSign}
+            colorClass="hover:border-emerald-400/50 text-emerald-400"
+            loading={loading}
+          />
         </div>
 
-        <!-- Cotações e Valores Calculados -->
-        <div class="space-y-4">
+        {/* Footer Ajustado */}
+        <footer className="mt-16 pt-8 border-t border-white/5 text-center">
+            <p className="text-[10px] sm:text-xs text-gray-700 font-black uppercase tracking-[0.3em]">
+               GTK
+            </p>
+        </footer>
+      </main>
 
-            <!-- Saldo em Dólar (USD) -->
-            <div class="flex justify-between items-center p-4 bg-gray-700 rounded-lg">
-                <div>
-                    <p class="text-sm font-medium text-gray-300">Valor Atual (USD)</p>
-                    <!-- Valor ajustado para celular (text-2xl) e maior em telas médias/grandes (sm:text-3xl) -->
-                    <p class="text-2xl sm:text-3xl font-bold text-white" id="total-usd">Calculando...</p>
+      {/* MODAL TRANSAÇÕES - Mobile Friendly */}
+      <Modal 
+        isOpen={activeModal === 'transactions'} 
+        onClose={() => setActiveModal(null)}
+        title="Histórico de Compras"
+        icon={History}
+      >
+        <div className="space-y-3 max-h-[50dvh] sm:max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+          {[...PURCHASE_TRANSACTIONS].reverse().map((tx, i) => (
+            <div key={i} className="flex justify-between items-center p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 border border-white/5">
+              <div>
+                <p className="text-[9px] text-gray-500 font-bold uppercase mb-0.5">ID: {tx.id}</p>
+                <p className="font-bold text-white text-sm sm:text-base">{formatBTC(tx.btc)} <span className="text-orange-500 text-[10px]">BTC</span></p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-medium text-gray-400">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
+                <div className="mt-0.5 flex items-center justify-end text-[9px] text-emerald-500 font-bold">
+                  <ArrowUpRight className="w-2.5 h-2.5" /> OK
                 </div>
-                <div class="text-right">
-                    <p class="text-sm text-gray-400" id="btc-price-usd">BTC/USD: --</p>
-                    <p class="text-xs text-gray-500 mt-1">Cotação do BTC</p>
-                </div>
+              </div>
             </div>
+          ))}
+        </div>
+        <div className="mt-6 p-4 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-center">
+           <p className="text-[10px] text-orange-500 font-bold uppercase mb-1">Volume Total</p>
+           <p className="text-lg font-black text-white">{formatBTC(WALLET_BALANCE_BTC)} BTC</p>
+        </div>
+      </Modal>
 
-            <!-- Saldo em Real (BRL) -->
-            <div class="flex justify-between items-center p-4 bg-gray-700 rounded-lg">
-                <div>
-                    <p class="text-sm font-medium text-gray-300">Valor Atual (BRL)</p>
-                    <!-- Valor ajustado para celular (text-2xl) e maior em telas médias/grandes (sm:text-3xl) -->
-                    <p class="text-2xl sm:text-3xl font-bold text-white" id="total-brl">Calculando...</p>
-                </div>
-                <div class="text-right">
-                    <p class="text-sm text-gray-400" id="usd-brl-rate">USD/BRL: --</p>
-                    <p class="text-xs text-gray-500 mt-1">Taxa de Câmbio</p>
-                </div>
-            </div>
-
-            <!-- Quadro de Lucro/Prejuízo (BRL) -->
-            <div class="p-4 bg-gray-700 rounded-lg text-center">
-                <p class="text-sm font-medium text-gray-300 mb-2">Lucro / Prejuízo (BRL) - BTC</p>
-                <!-- Valor em R$ -->
-                <p class="text-3xl sm:text-4xl font-extrabold mb-1" id="profit-loss-brl">R$ 0,00</p>
-                <!-- Percentual de ROI -->
-                <p class="text-xl font-bold" id="profit-loss-percent">0.00%</p>
-                <p class="text-xs text-gray-500 mt-2">Investimento Inicial: R$ 100.000,00</p>
-            </div>
-            
-            <!-- Quadro de Comparativo (Juros Compostos 1% a.m.) - NOVO -->
-            <div class="p-4 bg-gray-700 rounded-lg text-center border-l-4 border-yellow-500">
-                <p class="text-sm font-medium text-gray-300 mb-2">Comparativo: Juros Compostos (1% a.m.)</p>
-                <!-- Valor projetado em R$ -->
-                <p class="text-xl font-extrabold text-yellow-400" id="compound-target-brl">R$ 100.000,00</p>
-                
-                <!-- NOVO: Rentabilidade total em R$ -->
-                <p class="text-sm text-gray-400 mt-1" id="compound-yield">Rendimento: --</p>
-                
-                <!-- Rentabilidade Relativa -->
-                <p class="text-sm font-bold mt-1" id="compound-diff">Rentabilidade: --</p>
-                <p class="text-xs text-gray-500 mt-2" id="compound-period">Desde 29/09/2025 (0 meses)</p>
-            </div>
-            
+      {/* MODAL PNL */}
+      <Modal 
+        isOpen={activeModal === 'pnl'} 
+        onClose={() => setActiveModal(null)}
+        title="Performance"
+        icon={Calculator}
+      >
+        <div className={`p-6 sm:p-8 rounded-3xl border transition-all text-center ${metrics.isProfit ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20'}`}>
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">P/L Líquido</p>
+          <h4 className={`text-3xl sm:text-4xl font-black mb-1 ${metrics.isProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
+            {formatBRL(metrics.pnl)}
+          </h4>
+          <p className={`text-base sm:text-lg font-bold italic opacity-80 ${metrics.isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {metrics.pnlPercent > 0 ? '+' : ''}{metrics.pnlPercent.toFixed(2)}%
+          </p>
         </div>
         
-        <!-- Área de Status/Erro -->
-        <div class="mt-6 text-center text-sm">
-            <p id="status-message" class="text-yellow-500">Aguardando dados da API...</p>
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+            <p className="text-[9px] text-gray-500 font-bold uppercase mb-0.5">Investimento</p>
+            <p className="font-bold text-white text-xs">{formatBRL(INITIAL_INVESTMENT_BRL)}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+            <p className="text-[9px] text-gray-500 font-bold uppercase mb-0.5">Valor Atual</p>
+            <p className="font-bold text-white text-xs">{formatBRL(metrics.currentBrlValue)}</p>
+          </div>
         </div>
 
+        <button 
+          onClick={() => setActiveModal(null)}
+          className={`w-full mt-6 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${metrics.isProfit ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20' : 'bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-500/20'}`}
+        >
+          Fechar
+        </button>
+      </Modal>
+
+      {/* MODAL PREÇO MÉDIO */}
+      <Modal 
+        isOpen={activeModal === 'average'} 
+        onClose={() => setActiveModal(null)}
+        title="Preço Médio"
+        icon={TrendingUp}
+      >
+        <div className="space-y-4">
+          <div className="p-6 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-center">
+            <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest mb-2">Seu Custo Médio</p>
+            <p className="text-2xl sm:text-3xl font-black text-white">{formatBRL(metrics.avgPrice)}</p>
+          </div>
+          
+          <div className="bg-white/5 rounded-xl p-4 space-y-3">
+             <div className="flex justify-between text-[10px]">
+                <span className="text-gray-500 font-bold uppercase">Preço Mercado</span>
+                <span className="text-white font-bold">{formatBRL(prices.brl)}</span>
+             </div>
+             <div className="h-px bg-white/5" />
+             <div className="flex justify-between text-[10px]">
+                <span className="text-gray-500 font-bold uppercase">Status Break-even</span>
+                <span className={prices.brl > metrics.avgPrice ? "text-emerald-500 font-black" : "text-rose-500 font-black"}>
+                  {((prices.brl / metrics.avgPrice - 1) * 100).toFixed(2)}%
+                </span>
+             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Estilos customizados */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(249, 115, 22, 0.2); border-radius: 10px; }
+        @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .animate-in { animation: fade-in 0.3s ease-out; }
+        @media (max-width: 640px) {
+          .slide-in-from-bottom { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        }
+      `}} />
     </div>
-
-    <script>
-        // Dados fixos da carteira
-        const BTC_BALANCE = 0.1704;
-        // Investimento inicial em BRL para cálculo de Lucro/Prejuízo
-        const INITIAL_INVESTMENT_BRL = 100000.00; 
-        // Taxa de juros compostos mensal para comparação (1%)
-        const COMPOUND_RATE_MONTHLY = 0.01;
-        // Data de início do investimento para cálculo de juros compostos
-        const START_DATE = new Date('2025-09-29T00:00:00'); // 29/09/2025
-        
-        // URLs das APIs públicas para cotação
-        // 1. Cotação do Bitcoin em Dólar (CoinGecko)
-        const btcToUsdApiUrl = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
-        // 2. Cotação do Dólar em Real (Awesome API)
-        const usdBrlApiUrl = 'https://economia.awesomeapi.com.br/last/USD-BRL';
-
-        // Elementos do DOM
-        const btcBalanceEl = document.getElementById('btc-balance');
-        const totalUsdEl = document.getElementById('total-usd');
-        const totalBrlEl = document.getElementById('total-brl');
-        const profitLossEl = document.getElementById('profit-loss-brl');
-        const profitLossPercentEl = document.getElementById('profit-loss-percent');
-        const btcPriceUsdEl = document.getElementById('btc-price-usd');
-        const usdBrlRateEl = document.getElementById('usd-brl-rate');
-        const statusMessageEl = document.getElementById('status-message');
-        // Novos elementos para comparação
-        const compoundTargetEl = document.getElementById('compound-target-brl'); 
-        const compoundDiffEl = document.getElementById('compound-diff');
-        const compoundPeriodEl = document.getElementById('compound-period');
-        const compoundYieldEl = document.getElementById('compound-yield'); // NOVO ELEMENTO
-
-        // Adiciona " BTC" ao saldo fixo ao carregar
-        btcBalanceEl.textContent = `${BTC_BALANCE} BTC`;
-
-        // Função para formatação de moeda
-        const formatCurrency = (amount, currency, locale) => {
-            return amount.toLocaleString(locale, {
-                style: 'currency',
-                currency: currency,
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        };
-        
-        // Função para calcular meses entre duas datas
-        function getMonthsDifference(d1, d2) {
-            let months;
-            months = (d2.getFullYear() - d1.getFullYear()) * 12;
-            months -= d1.getMonth();
-            months += d2.getMonth();
-            // Garante que o número de meses não seja negativo (caso a data de início seja futura)
-            return Math.max(0, months); 
-        }
-
-        // Função de retry com backoff exponencial para lidar com falhas temporárias de rede
-        async function fetchWithRetry(url, maxRetries = 3, delay = 1000) {
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                        // Se for um erro HTTP (4xx, 5xx), lança erro, mas permite retry
-                        throw new Error(`Erro HTTP! Status: ${response.status}`);
-                    }
-                    return response;
-                } catch (error) {
-                    console.warn(`Tentativa ${i + 1} de ${maxRetries} falhou para ${url}: ${error.message}`);
-                    if (i === maxRetries - 1) {
-                        // Se for a última tentativa, lança o erro final
-                        throw error;
-                    }
-                    // Espera com atraso exponencial (1s, 2s, 4s, ...)
-                    await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
-                }
-            }
-        }
-
-
-        // Função principal para buscar e calcular
-        async function updateWallet() {
-            statusMessageEl.textContent = "Atualizando saldos em tempo real...";
-            statusMessageEl.classList.remove('text-red-500', 'text-green-500');
-            statusMessageEl.classList.add('text-yellow-500');
-
-            try {
-                // 1. Buscar preço do BTC em USD (com retry)
-                const btcResponse = await fetchWithRetry(btcToUsdApiUrl);
-                const btcData = await btcResponse.json();
-                const btcPriceUSD = btcData?.bitcoin?.usd;
-                if (!btcPriceUSD) throw new Error('Dados de cotação BTC inválidos.');
-
-                // 2. Buscar taxa de câmbio USD/BRL (com retry)
-                const brlResponse = await fetchWithRetry(usdBrlApiUrl);
-                const brlData = await brlResponse.json();
-                const brlRate = parseFloat(brlData?.USDBRL?.ask);
-                if (isNaN(brlRate)) throw new Error('Dados de taxa USD/BRL inválidos.');
-
-                // --- Cálculos de Cripto ---
-                const totalUSD = BTC_BALANCE * btcPriceUSD;
-                const totalBRL = totalUSD * brlRate;
-                const profitOrLossBRL = totalBRL - INITIAL_INVESTMENT_BRL;
-                const profitOrLossPercent = (profitOrLossBRL / INITIAL_INVESTMENT_BRL) * 100;
-
-                // --- Cálculos de Comparação (Juros Compostos) ---
-                const today = new Date();
-                const monthsPassed = getMonthsDifference(START_DATE, today);
-                
-                // Fórmula de Juros Compostos: M = C * (1 + i)^t
-                const compoundTargetBRL = INITIAL_INVESTMENT_BRL * Math.pow((1 + COMPOUND_RATE_MONTHLY), monthsPassed);
-                const compoundYieldBRL = compoundTargetBRL - INITIAL_INVESTMENT_BRL; // NOVO CÁLCULO
-                
-                // Diferença (BTC atual vs. Juros Compostos)
-                const diffBtcCompound = totalBRL - compoundTargetBRL;
-
-                // --- Atualizar a UI ---
-                
-                // Valores Totais
-                totalUsdEl.textContent = formatCurrency(totalUSD, 'USD', 'en-US');
-                totalBrlEl.textContent = formatCurrency(totalBRL, 'BRL', 'pt-BR');
-                
-                // Lucro/Prejuízo e Percentual (BTC)
-                const isProfit = profitOrLossBRL >= 0;
-                const colorClass = isProfit ? 'text-green-500' : 'text-red-500';
-
-                // 1. Valor em R$
-                let profitLossText = formatCurrency(Math.abs(profitOrLossBRL), 'BRL', 'pt-BR');
-                profitLossEl.classList.remove('text-green-500', 'text-red-500');
-                profitLossEl.classList.add(colorClass);
-                profitLossText = (isProfit ? `+ ${profitLossText}` : `- ${profitLossText}`);
-                profitLossEl.textContent = profitLossText;
-                
-                // 2. Percentual
-                let percentText = `${Math.abs(profitOrLossPercent).toFixed(2)}%`;
-                profitLossPercentEl.classList.remove('text-green-500', 'text-red-500');
-                profitLossPercentEl.classList.add(colorClass);
-                percentText = (isProfit ? `+${percentText}` : `-${percentText}`);
-                profitLossPercentEl.textContent = percentText;
-                
-                // Cotações
-                btcPriceUsdEl.textContent = `BTC/USD: ${formatCurrency(btcPriceUSD, 'USD', 'en-US')}`;
-                usdBrlRateEl.textContent = `USD/BRL: ${formatCurrency(brlRate, 'BRL', 'pt-BR').replace('R$', '')}`;
-                
-                // Comparativo (Juros Compostos)
-                compoundTargetEl.textContent = formatCurrency(compoundTargetBRL, 'BRL', 'pt-BR');
-                
-                // NOVO: Exibe o Rendimento (lucro total)
-                compoundYieldEl.textContent = `Rendimento: ${formatCurrency(compoundYieldBRL, 'BRL', 'pt-BR')}`;
-                
-                compoundPeriodEl.textContent = `Desde ${START_DATE.toLocaleDateString('pt-BR')} (${monthsPassed} meses)`;
-                
-                const isBtcWinning = diffBtcCompound >= 0;
-                const diffColorClass = isBtcWinning ? 'text-green-400' : 'text-red-400';
-                const diffPrefix = isBtcWinning ? 'Acima' : 'Abaixo';
-                const diffText = `${diffPrefix} ${formatCurrency(Math.abs(diffBtcCompound), 'BRL', 'pt-BR')}`;
-                
-                compoundDiffEl.classList.remove('text-green-400', 'text-red-400', 'text-white');
-                compoundDiffEl.classList.add(diffColorClass);
-                compoundDiffEl.textContent = diffText;
-                
-                // Status de sucesso
-                statusMessageEl.textContent = `Última atualização: ${new Date().toLocaleTimeString('pt-BR')}.`;
-                statusMessageEl.classList.remove('text-yellow-500');
-                statusMessageEl.classList.add('text-green-500');
-
-            } catch (error) {
-                console.error("Erro ao atualizar a carteira:", error);
-                totalUsdEl.textContent = 'ERRO';
-                totalBrlEl.textContent = 'ERRO';
-                profitLossEl.textContent = 'ERRO';
-                profitLossPercentEl.textContent = 'ERRO';
-                compoundTargetEl.textContent = 'ERRO';
-                compoundYieldEl.textContent = 'ERRO'; // ERRO NO NOVO ELEMENTO
-                compoundDiffEl.textContent = 'ERRO';
-                btcPriceUsdEl.textContent = 'BTC/USD: ERRO';
-                usdBrlRateEl.textContent = 'USD/BRL: ERRO';
-                statusMessageEl.textContent = `Erro ao buscar dados. Tente novamente. (${error.message})`;
-                statusMessageEl.classList.remove('text-yellow-500', 'text-green-500');
-                statusMessageEl.classList.add('text-red-500');
-            }
-        }
-
-        // Chamada inicial e atualização a cada 60 segundos (1 minuto)
-        updateWallet();
-        setInterval(updateWallet, 60000); // Atualiza a cada 60 segundos (60000 ms)
-
-    </script>
-</body>
-</html>
+  );
+}
